@@ -91,6 +91,8 @@ group.add_argument('--random-source', action='store_true',
                    help='Generate a random configuration and print source ')
 group.add_argument('--make-settings-file', action='store_true',
                    help='Create a skeleton settings file from call graph')
+group.add_argument('--best-source-from-db', default=None,
+                   help='Print source of best configuration')
 
 
 # class HalideRandomConfig(opentuner.search.technique.SearchTechnique):
@@ -665,6 +667,37 @@ def random_source(args):
   source = m.schedule_to_source(schedule)
   print source
 
+def best_source(args):
+  """
+  Dump the source code of the best schedule in a particular db.
+  """
+  import sqlite3
+  import pickle
+  import os.path
+
+  if not os.path.isfile(args.best_source_from_db):
+    print "No database found at ", args.best_source_from_db
+    exit()
+
+  conn = sqlite3.connect(args.best_source_from_db)
+
+  cursor = conn.cursor()
+  cursor.execute("select configuration_id from result where state=='OK' order by time limit 1;")
+  config = cursor.fetchone()
+
+  if not config:
+    print "No valid configurations found."
+    exit()
+
+  cursor = conn.cursor()
+  cursor.execute("select data from configuration where id=:id;", {"id":config[0]})
+
+  config_data = pickle.loads(cursor.fetchone()[0])
+  m = HalideTuner(args)
+  schedule = m.cfg_to_schedule(config_data)
+  source = m.schedule_to_source(schedule)
+  print source
+
 
 def main(args):
   if args.random_test:
@@ -674,6 +707,8 @@ def main(args):
   elif args.make_settings_file:
     opentuner.tuningrunmain.init_logging()
     HalideTuner(args).make_settings_file()
+  elif args.best_source_from_db:
+    best_source(args)
   else:
     HalideTuner.main(args)
 
